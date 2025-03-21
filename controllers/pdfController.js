@@ -41,8 +41,18 @@ async function replaceTextInPDF(req, res) {
 
     const updatedPdfBytes = await pdfDoc.save();
     const filename = `updated-${Date.now()}.pdf`;
-    const outputPath = path.join(__dirname, "..", "updated_pdfs", filename);
+    //const outputPath = path.join(__dirname, "..", "updated_pdfs", filename);
 
+
+// Ensure the directory exists
+const outputDir = path.join(__dirname, "..", "updated_pdfs");
+if (!fs.existsSync(outputDir)) {
+  fs.mkdirSync(outputDir);
+}
+
+const outputPath = path.join(outputDir, filename);
+fs.writeFileSync(outputPath, updatedPdfBytes);
+    
     fs.writeFileSync(outputPath, updatedPdfBytes);
 
     // Optionally store record in PostgreSQL
