@@ -1,19 +1,6 @@
 const fs = require("fs");
 const path = require("path");
 const { PDFDocument, rgb } = require("pdf-lib");
-const pdfParse = require("pdf-parse");
-
-// Normalize text function (fix ligatures & spacing issues)
-function normalizeText(text) {
-  return text
-    .replace(/ﬀ/g, "ff") // Fix ligatures
-    .replace(/ﬃ/g, "ffi")
-    .replace(/ﬄ/g, "ffl")
-    .replace(/ﬁ/g, "fi")
-    .replace(/ﬂ/g, "fl")
-    .replace(/ +/g, " ") // Remove extra spaces
-    .trim();
-}
 
 // Function to replace text in a PDF
 async function replaceTextInPDF(req, res) {
@@ -30,35 +17,28 @@ async function replaceTextInPDF(req, res) {
     const inputPath = path.join(__dirname, "../uploads", req.file.filename);
     const outputPath = path.join(__dirname, "../uploads", `updated-${req.file.filename}`);
 
-    // Read the PDF file
-    const pdfBuffer = fs.readFileSync(inputPath);
-    
-    // Extract text using `pdf-parse`
-    const data = await pdfParse(pdfBuffer);
-    let extractedText = normalizeText(data.text);
+    // Load the PDF document
+    const existingPdfBytes = fs.readFileSync(inputPath);
+    const pdfDoc = await PDFDocument.load(existingPdfBytes);
 
-    // ✅ Check if the text exists in the PDF before replacing
-    if (!extractedText.includes(normalizeText(searchText))) {
-      return res.status(400).json({ message: "Text not found in PDF" });
-    }
+    // Embed a new font (Optional: You can change this)
+    const timesRomanFont = await pdfDoc.embedFont(PDFDocument.PDFFont.Helvetica);
 
-    // Load the original PDF
-    const pdfDoc = await PDFDocument.load(pdfBuffer);
+    // Modify the first page text (Simple Example)
     const pages = pdfDoc.getPages();
-
     pages.forEach((page) => {
-      const { width, height } = page.getSize();
       page.drawText(replaceText, {
         x: 50,
-        y: height - 50,
-        size: 14,
-        color: rgb(1, 0, 0),
+        y: 500, // Positioning of text
+        size: 12,
+        font: timesRomanFont,
+        color: rgb(0, 0, 0),
       });
     });
 
-    // ✅ Save the updated PDF
-    const modifiedPdfBytes = await pdfDoc.save();
-    fs.writeFileSync(outputPath, modifiedPdfBytes);
+    // Save the modified PDF
+    const pdfBytes = await pdfDoc.save();
+    fs.writeFileSync(outputPath, pdfBytes);
 
     res.json({
       message: "PDF text replaced successfully",
