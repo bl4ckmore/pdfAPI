@@ -76,5 +76,11 @@ async function replaceTextInPDF(req, res) {
     res.status(500).json({ message: "Error processing PDF" });
   }
 }
+console.log("✅ Incoming fields:", {
+  file: req.file,
+  searchText: req.body.searchText,
+  replaceText: req.body.replaceText,
+});
+
 
 module.exports = { replaceTextInPDF };
