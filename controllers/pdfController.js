@@ -1,81 +1,70 @@
 const fs = require("fs");
 const path = require("path");
-const { PDFDocument, rgb, StandardFonts } = require("pdf-lib");
+const { PDFDocument, rgb } = require("pdf-lib");
 const pdfParse = require("pdf-parse");
 
+// Function to replace text in a PDF
 async function replaceTextInPDF(req, res) {
-    try {
-        if (!req.file) {
-            return res.status(400).json({ message: "No file uploaded" });
-        }
-
-        const { searchText, replaceText } = req.body;
-        if (!searchText || !replaceText) {
-            return res.status(400).json({ message: "Missing search or replace text" });
-        }
-
-        const inputPath = path.join(__dirname, "../uploads", req.file.filename);
-        const outputPath = path.join(__dirname, "../uploads", `updated-${req.file.filename}`);
-
-        // Load the PDF document
-        const pdfBuffer = fs.readFileSync(inputPath);
-        const pdfDoc = await PDFDocument.load(pdfBuffer);
-        const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
-
-        let textFound = false;
-
-        // Extract text from PDF
-        const extractedData = await pdfParse(pdfBuffer);
-        let fullText = extractedData.text;
-
-        if (!fullText.includes(searchText)) {
-            return res.status(400).json({ message: "Text not found in PDF" });
-        }
-
-        // Modify pages where text is found
-        const pages = pdfDoc.getPages();
-        pages.forEach((page) => {
-            let { width, height } = page.getSize();
-            let x = 50;
-            let y = height - 100;
-
-            if (fullText.includes(searchText)) {
-                textFound = true;
-
-                // **Erase existing text** by covering it with a white rectangle
-                page.drawRectangle({
-                    x: x - 5,  // Offset for better alignment
-                    y: y - 5,
-                    width: searchText.length * 7,
-                    height: 15,
-                    color: rgb(1, 1, 1), // White to "erase"
-                });
-
-                // **Write new text at the same position**
-                page.drawText(replaceText, {
-                    x: x,
-                    y: y,
-                    size: 12,
-                    font: font,
-                    color: rgb(0, 0, 0),
-                });
-            }
-        });
-
-        if (!textFound) {
-            return res.status(400).json({ message: "Text not found in PDF" });
-        }
-
-        // Save and return the updated PDF
-        const pdfBytes = await pdfDoc.save();
-        fs.writeFileSync(outputPath, pdfBytes);
-
-        res.json({ message: "PDF text replaced successfully", filename: `updated-${req.file.filename}` });
-
-    } catch (error) {
-        console.error("Error processing PDF:", error);
-        res.status(500).json({ message: "Error processing PDF" });
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: "No file uploaded" });
     }
+
+    const { searchText, replaceText } = req.body;
+    if (!searchText || !replaceText) {
+      return res.status(400).json({ message: "Missing search or replace text" });
+    }
+
+    const inputPath = path.join(__dirname, "../uploads", req.file.filename);
+    const outputPath = path.join(__dirname, "../uploads", `updated-${req.file.filename}`);
+
+    // Read the PDF file
+    const pdfBuffer = fs.readFileSync(inputPath);
+    
+    // Extract text using `pdf-parse`
+    const data = await pdfParse(pdfBuffer);
+    let extractedText = data.text;
+
+    if (!extractedText.includes(searchText)) {
+      return res.status(400).json({ message: "Text not found in PDF" });
+    }
+
+    // Load the existing PDF
+    const pdfDoc = await PDFDocument.load(pdfBuffer);
+    const pages = pdfDoc.getPages();
+
+    for (let page of pages) {
+      let { width, height } = page.getSize();
+      let contentStream = page.getTextContent();
+      let textItems = contentStream.items;
+
+      for (let textItem of textItems) {
+        if (textItem.str.includes(searchText)) {
+          let newText = textItem.str.replace(new RegExp(searchText, "g"), replaceText);
+          
+          // Draw new text at the same position
+          page.drawText(newText, {
+            x: textItem.transform[4],
+            y: height - textItem.transform[5],
+            size: 12,
+            color: rgb(0, 0, 0)
+          });
+        }
+      }
+    }
+
+    // Save updated PDF
+    const pdfBytes = await pdfDoc.save();
+    fs.writeFileSync(outputPath, pdfBytes);
+
+    res.json({
+      message: "PDF text replaced successfully",
+      filename: `updated-${req.file.filename}`,
+    });
+  } catch (error) {
+    console.error("Error processing PDF:", error);
+    res.status(500).json({ message: "Error processing PDF" });
+  }
 }
 
 module.exports = { replaceTextInPDF };
