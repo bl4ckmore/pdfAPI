@@ -1,10 +1,11 @@
 const express = require("express");
-const path = require("path");
 const router = express.Router();
+const multer = require("multer");
+const { replaceTextInPDF } = require("../controllers/pdfController");
 
-router.get("/pdf/:filename", (req, res) => {
-  const filePath = path.join(__dirname, "../uploads", req.params.filename);
-  res.download(filePath); // 👈 This forces download as a PDF
-});
+// Set up multer
+const upload = multer({ dest: "uploads/" });
+
+router.post("/replace-text", upload.single("pdf"), replaceTextInPDF);
 
 module.exports = router;
