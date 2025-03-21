@@ -59,6 +59,14 @@ async function replaceTextInPDF(req, res) {
     console.error("❌ Error:", error);
     res.status(500).json({ message: "Error processing PDF" });
   }
+
+
+  console.log("✅ Upload Request Received:", {
+    files: req.files,
+    body: req.body,
+  });
+  
+
 }
 
 module.exports = { replaceTextInPDF };
