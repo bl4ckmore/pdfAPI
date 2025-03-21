@@ -11,7 +11,7 @@ conn.once("open", () => {
   console.log("✅ GridFS Initialized");
 });
 
-// ✅ Upload PDF to MongoDB (Corrected)
+// ✅ Upload PDF to MongoDB
 async function uploadPDFToMongoDB(fileBuffer, filename) {
   return new Promise((resolve, reject) => {
     const uploadStream = gfsBucket.openUploadStream(filename);
@@ -31,21 +31,25 @@ async function replaceTextInPDF(req, res) {
     if (!searchText || !replaceText)
       return res.status(400).json({ message: "Missing search or replace text" });
 
-    // ✅ Load the PDF from the request
+    console.log("✅ Incoming fields:", { searchText, replaceText });
+
     const pdfBuffer = req.file.buffer;
     const pdfDoc = await PDFDocument.load(pdfBuffer);
     const pages = pdfDoc.getPages();
 
     let textFound = false;
 
-    // ✅ Loop through pages to find & replace text
     for (const page of pages) {
       let pageText = page.getTextContent ? await page.getTextContent() : "";
       pageText = pageText.items ? pageText.items.map((item) => item.str).join(" ") : "";
 
       if (pageText.includes(searchText)) {
         textFound = true;
-        const modifiedText = pageText.replace(new RegExp(searchText, "g"), replaceText);
+
+        const modifiedText = pageText.replace(
+          new RegExp(searchText, "g"),
+          replaceText
+        );
 
         const { width, height } = page.getSize();
         page.drawText(modifiedText, {
@@ -58,12 +62,11 @@ async function replaceTextInPDF(req, res) {
       }
     }
 
-    if (!textFound) return res.status(400).json({ message: "Text not found in PDF" });
+    if (!textFound)
+      return res.status(400).json({ message: "Text not found in PDF" });
 
-    // ✅ Save updated PDF
     const updatedPdfBytes = await pdfDoc.save();
 
-    // ✅ Upload new PDF to MongoDB GridFS
     const updatedFilename = `updated-${req.file.filename}`;
     await uploadPDFToMongoDB(updatedPdfBytes, updatedFilename);
 
@@ -76,11 +79,5 @@ async function replaceTextInPDF(req, res) {
     res.status(500).json({ message: "Error processing PDF" });
   }
 }
-console.log("✅ Incoming fields:", {
-  
-  searchText: req.body.searchText,
-  replaceText: req.body.replaceText,
-});
-
 
 module.exports = { replaceTextInPDF };
