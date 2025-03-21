@@ -4,13 +4,20 @@ const pdfRoutes = require("./routes/pdfRoutes");
 const { gfs } = require("./db");
 
 const app = express();
-app.use(cors());
+
+// ✅ Enable CORS for all origins
+app.use(cors({ origin: "*", methods: "GET,POST,PUT,DELETE" }));
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// Attach GridFS to app
 app.set("gfs", gfs);
+
+// Routes
 app.use("/api/pdf", pdfRoutes);
 
+// ✅ Serve PDF files
 app.get("/pdf/:filename", async (req, res) => {
   const gfs = req.app.get("gfs");
   if (!gfs) return res.status(500).json({ message: "GridFS not initialized" });
@@ -27,8 +34,7 @@ app.get("/pdf/:filename", async (req, res) => {
   }
 });
 
-
-
+// ✅ Start Server
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
