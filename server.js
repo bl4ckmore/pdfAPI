@@ -16,7 +16,7 @@ mongoose
 const conn = mongoose.connection;
 let gfs;
 
-conn.once("open", () => {
+conn.once("open", () => { 
   gfs = Grid(conn.db, mongoose.mongo);
   gfs.collection("uploads");
   console.log("✅ GridFS initialized");
