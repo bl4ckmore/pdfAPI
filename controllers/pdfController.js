@@ -2,19 +2,26 @@ const { PDFDocument, rgb, StandardFonts } = require("pdf-lib");
 const mongoose = require("mongoose");
 const { GridFSBucket } = require("mongodb");
 
-// Store gfsBucket instance
-let gfsBucket;
+let gfsBucket = null;
 
-function initGridFSBucket() {
-  if (!gfsBucket && mongoose.connection.readyState === 1) {
-    gfsBucket = new GridFSBucket(mongoose.connection.db, {
-      bucketName: "uploads",
+// Wait for MongoDB connection and initialize GridFS
+async function ensureGridFSReady() {
+  if (gfsBucket) return;
+
+  if (mongoose.connection.readyState !== 1) {
+    await new Promise((resolve, reject) => {
+      mongoose.connection.once("open", resolve);
+      mongoose.connection.on("error", reject);
     });
-    console.log("✅ GridFS Initialized (on-demand)");
   }
+
+  gfsBucket = new GridFSBucket(mongoose.connection.db, {
+    bucketName: "uploads",
+  });
+  console.log("✅ GridFSBucket initialized");
 }
 
-// Convert stream to buffer
+// Convert a MongoDB stream to buffer
 function streamToBuffer(stream) {
   return new Promise((resolve, reject) => {
     const chunks = [];
@@ -24,8 +31,10 @@ function streamToBuffer(stream) {
   });
 }
 
-// Upload file to MongoDB
+// Upload a buffer to GridFS
 async function uploadPDFToMongoDB(buffer, filename) {
+  await ensureGridFSReady();
+
   return new Promise((resolve, reject) => {
     const uploadStream = gfsBucket.openUploadStream(filename);
     uploadStream.end(buffer);
@@ -34,14 +43,10 @@ async function uploadPDFToMongoDB(buffer, filename) {
   });
 }
 
-// Replace Text in PDF
+// Replace text in the PDF and save to GridFS
 async function replaceTextInPDF(req, res) {
   try {
-    initGridFSBucket(); // Ensure it's ready
-
-    if (!gfsBucket) {
-      return res.status(500).json({ message: "GridFS not initialized" });
-    }
+    await ensureGridFSReady();
 
     if (!req.file) {
       return res.status(400).json({ message: "No file uploaded" });
@@ -76,14 +81,18 @@ async function replaceTextInPDF(req, res) {
       textFound = true;
     }
 
+    if (!textFound) {
+      return res.status(400).json({ message: "Text not found in PDF" });
+    }
+
     const updatedPdf = await pdfDoc.save();
     const newFilename = `updated-${req.file.filename}`;
     await uploadPDFToMongoDB(updatedPdf, newFilename);
 
-    res.json({ message: "Text replaced and PDF saved", filename: newFilename });
+    res.json({ message: "PDF text replaced successfully", filename: newFilename });
   } catch (error) {
     console.error("❌ Error in replaceTextInPDF:", error);
-    res.status(500).json({ message: "Server Error", error: error.message });
+    res.status(500).json({ message: "Server error", error: error.message });
   }
 }
 
