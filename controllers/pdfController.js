@@ -1,7 +1,19 @@
 const fs = require("fs");
 const path = require("path");
-const { PDFDocument, rgb } = require("pdf-lib");
+const { PDFDocument, rgb, StandardFonts } = require("pdf-lib");
 const pdfParse = require("pdf-parse");
+
+// Normalize text function (fix ligatures & spacing issues)
+function normalizeText(text) {
+  return text
+    .replace(/ﬀ/g, "ff")
+    .replace(/ﬃ/g, "ffi")
+    .replace(/ﬄ/g, "ffl")
+    .replace(/ﬁ/g, "fi")
+    .replace(/ﬂ/g, "fl")
+    .replace(/ +/g, " ")
+    .trim();
+}
 
 // Function to replace text in a PDF
 async function replaceTextInPDF(req, res) {
@@ -20,40 +32,48 @@ async function replaceTextInPDF(req, res) {
 
     // Read the PDF file
     const pdfBuffer = fs.readFileSync(inputPath);
-    
-    // Extract text using `pdf-parse`
     const data = await pdfParse(pdfBuffer);
-    let extractedText = data.text;
+    let extractedText = normalizeText(data.text);
 
-    if (!extractedText.includes(searchText)) {
+    if (!extractedText.includes(normalizeText(searchText))) {
       return res.status(400).json({ message: "Text not found in PDF" });
     }
 
     // Load the existing PDF
-    const pdfDoc = await PDFDocument.load(pdfBuffer);
+    const existingPdfBytes = fs.readFileSync(inputPath);
+    const pdfDoc = await PDFDocument.load(existingPdfBytes);
     const pages = pdfDoc.getPages();
 
-    for (let page of pages) {
-      let { width, height } = page.getSize();
-      let contentStream = page.getTextContent();
-      let textItems = contentStream.items;
+    // Use a standard font for replacing text
+    const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
 
-      for (let textItem of textItems) {
-        if (textItem.str.includes(searchText)) {
-          let newText = textItem.str.replace(new RegExp(searchText, "g"), replaceText);
-          
-          // Draw new text at the same position
-          page.drawText(newText, {
-            x: textItem.transform[4],
-            y: height - textItem.transform[5],
-            size: 12,
-            color: rgb(0, 0, 0)
-          });
-        }
+    pages.forEach((page) => {
+      let text = extractedText; // Use extracted text
+      if (text.includes(normalizeText(searchText))) {
+        // Replace text in a simple way (adjust for formatting)
+        const modifiedText = text.replace(new RegExp(normalizeText(searchText), "g"), normalizeText(replaceText));
+
+        // Remove old text by drawing a white rectangle over it (rudimentary)
+        page.drawRectangle({
+          x: 50,
+          y: page.getHeight() - 50,
+          width: 500,
+          height: 20,
+          color: rgb(1, 1, 1),
+        });
+
+        // Write new text in the same location
+        page.drawText(modifiedText, {
+          x: 50,
+          y: page.getHeight() - 50,
+          font,
+          size: 12,
+          color: rgb(0, 0, 0),
+        });
       }
-    }
+    });
 
-    // Save updated PDF
+    // Save the updated PDF
     const pdfBytes = await pdfDoc.save();
     fs.writeFileSync(outputPath, pdfBytes);
 
