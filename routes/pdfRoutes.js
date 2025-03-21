@@ -6,7 +6,7 @@ const { replaceTextInPDF } = require("../controllers/pdfController");
 const router = express.Router();
 
 const storage = new GridFsStorage({
-  url: "mongodb+srv://bl4kcmore:Bl4ckmore4!@cluster0.ros1b.mongodb.net/pdfDB?retryWrites=true&w=majority",
+  url: "mongodb+srv://gkupreishvili:admin@cluster.90tcw.mongodb.net/?retryWrites=true&w=majority&appName=Cluster",
   file: (req, file) => {
     return {
       filename: file.originalname,
