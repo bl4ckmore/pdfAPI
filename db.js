@@ -1,21 +1,9 @@
-// ✅ db.js
-const mongoose = require("mongoose");
-const Grid = require("gridfs-stream");
+// 📁 db.js
+const { Pool } = require("pg");
 
-const mongoURI =
-  "mongodb+srv://gkupreishvili:admin@cluster.90tcw.mongodb.net/?retryWrites=true&w=majority&appName=Cluster";
-
-process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0"; // 🔥 Force ignore SSL validation
-
-const conn = mongoose.createConnection(mongoURI);
-let gfs;
-
-
-
-conn.once("open", () => {
-  gfs = Grid(conn.db, mongoose.mongo);
-  gfs.collection("uploads");
-  console.log("✅ GridFS initialized");
+const pool = new Pool({
+  connectionString: "postgresql://master_4lcu_user:azhrIZSnUReYz3HSbjztKTy1sMtsiNnu@dpg-cvetc59opnds73ein3v0-a.oregon-postgres.render.com/master_4lcu",
+  ssl: { rejectUnauthorized: false },
 });
 
-module.exports = { conn, gfs };
+module.exports = pool;
