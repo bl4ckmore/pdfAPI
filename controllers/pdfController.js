@@ -17,55 +17,63 @@ async function replaceTextInPDF(req, res) {
         const inputPath = path.join(__dirname, "../uploads", req.file.filename);
         const outputPath = path.join(__dirname, "../uploads", `updated-${req.file.filename}`);
 
-        // Load the PDF
+        // Load the existing PDF
         const pdfBuffer = fs.readFileSync(inputPath);
         const pdfDoc = await PDFDocument.load(pdfBuffer);
-        const pages = pdfDoc.getPages();
         const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
-
+        
         let textFound = false;
 
-        for (const page of pages) {
+        // Extract text from the entire PDF
+        const extractedData = await pdfParse(pdfBuffer);
+        let fullText = extractedData.text;
+
+        if (!fullText.includes(searchText)) {
+            return res.status(400).json({ message: "Text not found in PDF" });
+        }
+
+        // Modify each page and replace the text
+        const pages = pdfDoc.getPages();
+        pages.forEach((page) => {
             let { width, height } = page.getSize();
-            let extractedText = await pdfParse(pdfBuffer);
-            let fullText = extractedText.text;
+            
+            // Assume text positions (Improve this logic later)
+            let x = 50; 
+            let y = height - 100;
 
             if (fullText.includes(searchText)) {
                 textFound = true;
 
-                // Get text positions (we need a more advanced method for accuracy)
-                let textX = 50;
-                let textY = height - 150; // Adjust dynamically later
-
-                // **Erase** the original text by drawing a white rectangle over it
+                // **Erase existing text** (by covering with white rectangle)
                 page.drawRectangle({
-                    x: textX,
-                    y: textY,
-                    width: replaceText.length * 7, // Width depends on text length
+                    x: x,
+                    y: y,
+                    width: searchText.length * 7,
                     height: 15,
-                    color: rgb(1, 1, 1), // White background to "erase" text
+                    color: rgb(1, 1, 1), // White to "erase"
                 });
 
-                // **Replace** text with new content in the same place
+                // **Write new text in the same position**
                 page.drawText(replaceText, {
-                    x: textX,
-                    y: textY,
+                    x: x,
+                    y: y,
                     size: 12,
                     font: font,
                     color: rgb(0, 0, 0),
                 });
             }
-        }
+        });
 
         if (!textFound) {
             return res.status(400).json({ message: "Text not found in PDF" });
         }
 
-        // Save the modified PDF
+        // Save and return the modified PDF
         const pdfBytes = await pdfDoc.save();
         fs.writeFileSync(outputPath, pdfBytes);
 
         res.json({ message: "PDF text replaced successfully", filename: `updated-${req.file.filename}` });
+
     } catch (error) {
         console.error("Error processing PDF:", error);
         res.status(500).json({ message: "Error processing PDF" });
