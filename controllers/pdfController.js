@@ -11,7 +11,9 @@ async function replaceTextInPDF(req, res) {
 
     const { searchText, replaceText } = req.body;
     if (!searchText || !replaceText) {
-      return res.status(400).json({ message: "Missing search or replace text" });
+      return res
+        .status(400)
+        .json({ message: "Missing search or replace text" });
     }
 
     const pdfBuffer = req.files.pdf.data;
@@ -31,6 +33,11 @@ async function replaceTextInPDF(req, res) {
       });
       textFound = true; // Simulating a replacement
     }
+    console.log("🪵 Incoming Request:", {
+      file: req.file,
+      searchText: req.body.searchText,
+      replaceText: req.body.replaceText,
+    });
 
     const updatedPdfBytes = await pdfDoc.save();
     const filename = `updated-${Date.now()}.pdf`;
@@ -39,7 +46,10 @@ async function replaceTextInPDF(req, res) {
     fs.writeFileSync(outputPath, updatedPdfBytes);
 
     // Optionally store record in PostgreSQL
-    await pool.query("INSERT INTO pdf_logs(filename, search, replace) VALUES($1, $2, $3)", [filename, searchText, replaceText]);
+    await pool.query(
+      "INSERT INTO pdf_logs(filename, search, replace) VALUES($1, $2, $3)",
+      [filename, searchText, replaceText]
+    );
 
     res.json({
       message: "PDF updated and saved",
