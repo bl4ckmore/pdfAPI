@@ -2,6 +2,7 @@ const fs = require("fs");
 const path = require("path");
 const pool = require("../db");
 const { PDFDocument, rgb, StandardFonts } = require("pdf-lib");
+const pdfParse = require("pdf-parse"); // Used to extract text
 
 async function replaceTextInPDF(req, res) {
   try {
@@ -15,69 +16,77 @@ async function replaceTextInPDF(req, res) {
     }
 
     const pdfBuffer = req.files.pdf.data;
+    
+    // Extract text to verify if it exists
+    const data = await pdfParse(pdfBuffer);
+    console.log("📄 Extracted PDF Text:", data.text);
+
+    if (!data.text.includes(searchText)) {
+      return res.status(400).json({ message: "Text not found in PDF" });
+    }
+
     const pdfDoc = await PDFDocument.load(pdfBuffer);
     const pages = pdfDoc.getPages();
-    const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
 
     let textFound = false;
-
     for (const page of pages) {
       const { width, height } = page.getSize();
-      const pageText = await page.getTextContent();
-      const textItems = pageText.items.map((item) => item.str);
 
-      if (textItems.includes(searchText)) {
-        textFound = true;
-        const textIndex = textItems.indexOf(searchText);
-        const textX = 50; // Approximate X coordinate (hardcoded for now)
-        const textY = height - (textIndex + 50); // Approximate Y coordinate
+      // Draw a white rectangle over the original text (simulate text erasure)
+      page.drawRectangle({
+        x: 50,
+        y: height - 50,
+        width: 300,
+        height: 20,
+        color: rgb(1, 1, 1),
+      });
 
-        // 🧹 Erase old text by drawing a white rectangle over it
-        page.drawRectangle({
-          x: textX - 5,
-          y: textY - 5,
-          width: font.widthOfTextAtSize(searchText, 12) + 10,
-          height: 14,
-          color: rgb(1, 1, 1), // White color to erase old text
-        });
-
-        // ✍️ Draw the new text at the same location
-        page.drawText(replaceText, {
-          x: textX,
-          y: textY,
-          size: 12,
-          font,
-          color: rgb(0, 0, 0),
-        });
-      }
+      // Draw the new text over the white area
+      page.drawText(replaceText, {
+        x: 50,
+        y: height - 50,
+        size: 12,
+        color: rgb(0, 0, 0),
+        font: await pdfDoc.embedFont(StandardFonts.Helvetica),
+      });
+      textFound = true;
     }
 
     if (!textFound) {
-      return res.status(400).json({ message: "Text not found in PDF" });
+      return res.status(400).json({ message: "Could not replace text" });
     }
 
     const updatedPdfBytes = await pdfDoc.save();
     const filename = `updated-${Date.now()}.pdf`;
+
+    // Ensure the directory exists
     const outputDir = path.join(__dirname, "..", "updated_pdfs");
     if (!fs.existsSync(outputDir)) {
       fs.mkdirSync(outputDir);
     }
+
     const outputPath = path.join(outputDir, filename);
     fs.writeFileSync(outputPath, updatedPdfBytes);
 
+    // Store the record in PostgreSQL
     await pool.query(
       "INSERT INTO pdf_logs(filename, search, replace) VALUES($1, $2, $3)",
       [filename, searchText, replaceText]
     );
 
     res.json({
-      message: "PDF updated successfully",
+      message: "PDF updated and saved",
       filename,
     });
   } catch (error) {
     console.error("❌ FULL ERROR:", error);
     res.status(500).json({ message: "Error processing PDF", error: error.message });
   }
+
+  console.log("✅ Upload Request Received:", {
+    files: req.files,
+    body: req.body,
+  });
 }
 
 module.exports = { replaceTextInPDF };
