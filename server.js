@@ -1,12 +1,10 @@
 const express = require("express");
 const cors = require("cors");
-const fileUpload = require("express-fileupload");
 const pdfRoutes = require("./routes/pdfRoutes");
 
 const app = express();
 app.use(cors());
 app.use(express.json());
-app.use(fileUpload()); // Middleware for handling file uploads
 
 app.use("/api/pdf", pdfRoutes);
 
