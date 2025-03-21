@@ -56,8 +56,8 @@ async function replaceTextInPDF(req, res) {
       filename,
     });
   } catch (error) {
-    console.error("❌ Error:", error);
-    res.status(500).json({ message: "Error processing PDF" });
+    console.error("❌ FULL ERROR:", error);
+    res.status(500).json({ message: "Error processing PDF", error: error.message });
   }
 
 
