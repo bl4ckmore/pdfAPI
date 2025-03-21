@@ -1,20 +1,24 @@
 const express = require("express");
-const router = express.Router();
 const multer = require("multer");
-const { replaceTextInPDF } = require("../controllers/pdfController");
+const GridFsStorage = require("multer-gridfs-storage");
+const { conn } = require("../db"); // Import DB connection
 
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, "uploads/");
-  },
-  filename: function (req, file, cb) {
-    const uniqueSuffix = Date.now() + "-" + file.originalname;
-    cb(null, uniqueSuffix);
-  },
+const router = express.Router();
+
+const storage = new GridFsStorage({
+  url: "mongodb://localhost:27017/pdfDB",
+  file: (req, file) => ({
+    filename: file.originalname,
+    bucketName: "uploads",
+  }),
 });
 
 const upload = multer({ storage });
 
-router.post("/replace-text", upload.single("pdf"), replaceTextInPDF);
+// Upload PDF
+router.post("/upload", upload.single("pdf"), async (req, res) => {
+  if (!req.file) return res.status(400).json({ message: "No file uploaded" });
+  res.json({ fileId: req.file.id, filename: req.file.filename });
+});
 
 module.exports = router;

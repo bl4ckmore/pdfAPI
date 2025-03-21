@@ -1,7 +1,17 @@
 const fs = require("fs");
-const path = require("path");
 const { PDFDocument, rgb, StandardFonts } = require("pdf-lib");
+const mongoose = require("mongoose");
+const Grid = require("gridfs-stream");
 const pdfParse = require("pdf-parse");
+
+// MongoDB & GridFS Setup
+const conn = mongoose.connection;
+let gfs;
+conn.once("open", () => {
+  gfs = Grid(conn.db, mongoose.mongo);
+  gfs.collection("uploads");
+  console.log("✅ GridFS Initialized");
+});
 
 // Normalize text function (fix ligatures & spacing issues)
 function normalizeText(text) {
@@ -11,75 +21,73 @@ function normalizeText(text) {
     .replace(/ﬄ/g, "ffl")
     .replace(/ﬁ/g, "fi")
     .replace(/ﬂ/g, "fl")
-    .replace(/ +/g, " ")
+    .replace(/ +/g, " ") // Remove extra spaces
     .trim();
 }
 
-// Function to replace text in a PDF
+// Upload PDF to MongoDB
+async function uploadPDFToMongoDB(fileBuffer, filename) {
+  return new Promise((resolve, reject) => {
+    const writeStream = gfs.createWriteStream({ filename });
+    writeStream.write(fileBuffer);
+    writeStream.end();
+    writeStream.on("finish", () => resolve(filename));
+    writeStream.on("error", (err) => reject(err));
+  });
+}
+
+// Replace text in PDF
 async function replaceTextInPDF(req, res) {
   try {
-    if (!req.file) {
-      return res.status(400).json({ message: "No file uploaded" });
-    }
+    if (!req.file) return res.status(400).json({ message: "No file uploaded" });
 
     const { searchText, replaceText } = req.body;
-    if (!searchText || !replaceText) {
+    if (!searchText || !replaceText)
       return res.status(400).json({ message: "Missing search or replace text" });
-    }
 
-    const inputPath = path.join(__dirname, "../uploads", req.file.filename);
-    const outputPath = path.join(__dirname, "../uploads", `updated-${req.file.filename}`);
-
-    // Read the PDF file
-    const pdfBuffer = fs.readFileSync(inputPath);
-    const data = await pdfParse(pdfBuffer);
-    let extractedText = normalizeText(data.text);
-
-    if (!extractedText.includes(normalizeText(searchText))) {
-      return res.status(400).json({ message: "Text not found in PDF" });
-    }
-
-    // Load the existing PDF
-    const existingPdfBytes = fs.readFileSync(inputPath);
-    const pdfDoc = await PDFDocument.load(existingPdfBytes);
+    // Load the PDF from the request
+    const pdfBuffer = req.file.buffer;
+    const pdfDoc = await PDFDocument.load(pdfBuffer);
     const pages = pdfDoc.getPages();
 
-    // Use a standard font for replacing text
-    const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+    let textFound = false;
 
-    pages.forEach((page) => {
-      let text = extractedText; // Use extracted text
-      if (text.includes(normalizeText(searchText))) {
-        // Replace text in a simple way (adjust for formatting)
-        const modifiedText = text.replace(new RegExp(normalizeText(searchText), "g"), normalizeText(replaceText));
+    // Loop through pages to find & replace text
+    for (const page of pages) {
+      let pageText = await page.getTextContent();
+      pageText = pageText.items.map((item) => item.str).join(" ");
+      pageText = normalizeText(pageText);
 
-        // Remove old text by drawing a white rectangle over it (rudimentary)
-        page.drawRectangle({
-          x: 50,
-          y: page.getHeight() - 50,
-          width: 500,
-          height: 20,
-          color: rgb(1, 1, 1),
-        });
+      if (pageText.includes(normalizeText(searchText))) {
+        textFound = true;
+        const modifiedText = pageText.replace(
+          new RegExp(normalizeText(searchText), "g"),
+          normalizeText(replaceText)
+        );
 
-        // Write new text in the same location
+        const { width, height } = page.getSize();
         page.drawText(modifiedText, {
           x: 50,
-          y: page.getHeight() - 50,
-          font,
+          y: height - 50,
           size: 12,
           color: rgb(0, 0, 0),
+          font: await pdfDoc.embedFont(StandardFonts.Helvetica),
         });
       }
-    });
+    }
 
-    // Save the updated PDF
-    const pdfBytes = await pdfDoc.save();
-    fs.writeFileSync(outputPath, pdfBytes);
+    if (!textFound) return res.status(400).json({ message: "Text not found in PDF" });
+
+    // Save updated PDF
+    const updatedPdfBytes = await pdfDoc.save();
+
+    // Upload new PDF to MongoDB GridFS
+    const updatedFilename = `updated-${req.file.filename}`;
+    await uploadPDFToMongoDB(updatedPdfBytes, updatedFilename);
 
     res.json({
       message: "PDF text replaced successfully",
-      filename: `updated-${req.file.filename}`,
+      filename: updatedFilename,
     });
   } catch (error) {
     console.error("Error processing PDF:", error);
