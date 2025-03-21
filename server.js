@@ -2,7 +2,7 @@ const mongoose = require("mongoose");
 const Grid = require("gridfs-stream");
 
 // MongoDB Connection URL
-const mongoURI = "mongodb://localhost:27017/pdfDB";
+const mongoURI = "mongodb+srv://bl4kcmore:Bl4ckmore4!@cluster0.ros1b.mongodb.net/";
 
 // Connect to MongoDB
 mongoose

@@ -3,6 +3,7 @@ const { PDFDocument, rgb, StandardFonts } = require("pdf-lib");
 const mongoose = require("mongoose");
 const Grid = require("gridfs-stream");
 const pdfParse = require("pdf-parse");
+const { publicDecrypt } = require("crypto");
 
 // MongoDB & GridFS Setup
 const conn = mongoose.connection;
