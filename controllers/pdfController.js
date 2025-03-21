@@ -33,8 +33,18 @@ async function replaceTextInPDF(req, res) {
 
     console.log("✅ Incoming fields:", { searchText, replaceText });
 
-    const pdfBuffer = req.file.buffer;
-    const pdfDoc = await PDFDocument.load(pdfBuffer);
+    
+    
+    const fileId = req.file.id || req.file._id;
+    const downloadStream = gfsBucket.openDownloadStream(fileId);
+    const { Readable } = require("stream");
+    const streamToBuffer = async (stream) =>
+      new Promise((resolve, reject) => {
+        const chunks = [];
+        stream.on("data", (chunk) => chunks.push(chunk));
+        stream.on("end", () => resolve(Buffer.concat(chunks)));
+        stream.on("error", reject);
+      });
     const pages = pdfDoc.getPages();
 
     let textFound = false;
