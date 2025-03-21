@@ -17,14 +17,14 @@ async function replaceTextInPDF(req, res) {
         const inputPath = path.join(__dirname, "../uploads", req.file.filename);
         const outputPath = path.join(__dirname, "../uploads", `updated-${req.file.filename}`);
 
-        // Load the existing PDF
+        // Load the PDF document
         const pdfBuffer = fs.readFileSync(inputPath);
         const pdfDoc = await PDFDocument.load(pdfBuffer);
         const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
-        
+
         let textFound = false;
 
-        // Extract text from the entire PDF
+        // Extract text from PDF
         const extractedData = await pdfParse(pdfBuffer);
         let fullText = extractedData.text;
 
@@ -32,28 +32,26 @@ async function replaceTextInPDF(req, res) {
             return res.status(400).json({ message: "Text not found in PDF" });
         }
 
-        // Modify each page and replace the text
+        // Modify pages where text is found
         const pages = pdfDoc.getPages();
         pages.forEach((page) => {
             let { width, height } = page.getSize();
-            
-            // Assume text positions (Improve this logic later)
-            let x = 50; 
+            let x = 50;
             let y = height - 100;
 
             if (fullText.includes(searchText)) {
                 textFound = true;
 
-                // **Erase existing text** (by covering with white rectangle)
+                // **Erase existing text** by covering it with a white rectangle
                 page.drawRectangle({
-                    x: x,
-                    y: y,
+                    x: x - 5,  // Offset for better alignment
+                    y: y - 5,
                     width: searchText.length * 7,
                     height: 15,
                     color: rgb(1, 1, 1), // White to "erase"
                 });
 
-                // **Write new text in the same position**
+                // **Write new text at the same position**
                 page.drawText(replaceText, {
                     x: x,
                     y: y,
@@ -68,7 +66,7 @@ async function replaceTextInPDF(req, res) {
             return res.status(400).json({ message: "Text not found in PDF" });
         }
 
-        // Save and return the modified PDF
+        // Save and return the updated PDF
         const pdfBytes = await pdfDoc.save();
         fs.writeFileSync(outputPath, pdfBytes);
 
