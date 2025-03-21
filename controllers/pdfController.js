@@ -1,6 +1,6 @@
 const fs = require("fs");
 const path = require("path");
-const { PDFDocument, rgb } = require("pdf-lib");
+const { PDFDocument, StandardFonts, rgb } = require("pdf-lib");
 
 // Function to replace text in a PDF
 async function replaceTextInPDF(req, res) {
@@ -17,19 +17,19 @@ async function replaceTextInPDF(req, res) {
     const inputPath = path.join(__dirname, "../uploads", req.file.filename);
     const outputPath = path.join(__dirname, "../uploads", `updated-${req.file.filename}`);
 
-    // Load the PDF document
+    // Load the existing PDF
     const existingPdfBytes = fs.readFileSync(inputPath);
     const pdfDoc = await PDFDocument.load(existingPdfBytes);
 
-    // Embed a new font (Optional: You can change this)
-    const timesRomanFont = await pdfDoc.embedFont(PDFDocument.PDFFont.Helvetica);
+    // Embed a built-in font
+    const timesRomanFont = await pdfDoc.embedFont(StandardFonts.TimesRoman);
 
-    // Modify the first page text (Simple Example)
+    // Modify the first page text (Example)
     const pages = pdfDoc.getPages();
     pages.forEach((page) => {
       page.drawText(replaceText, {
         x: 50,
-        y: 500, // Positioning of text
+        y: 500, // Adjust position as needed
         size: 12,
         font: timesRomanFont,
         color: rgb(0, 0, 0),
