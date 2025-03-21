@@ -23,7 +23,7 @@ async function replaceTextInPDF(req, res) {
     let textFound = false;
     for (const page of pages) {
       const { width, height } = page.getSize();
-      const textToDraw = `🔍 Text: ${searchText} ⟶ ${replaceText}`;
+      const textToDraw = `Text: ${searchText} => ${replaceText}`;
       page.drawText(textToDraw, {
         x: 50,
         y: height - 50,
