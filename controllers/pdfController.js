@@ -10,14 +10,15 @@ async function replaceTextInPDF(req, res) {
       return res.status(400).json({ message: "No file uploaded" });
     }
 
-    const { searchText, replaceText } = req.body;
-    if (!searchText || !replaceText) {
-      return res.status(400).json({ message: "Missing search or replace text" });
+    const { searchText, replaceText = "" } = req.body;
+
+    if (!searchText) {
+      return res.status(400).json({ message: "Missing search text" });
     }
 
     const pdfBuffer = req.files.pdf.data;
 
-    // Extract all text
+    // 🔍 Extract text from PDF
     const parsed = await pdfParse(pdfBuffer);
     let textContent = parsed.text;
 
@@ -25,10 +26,13 @@ async function replaceTextInPDF(req, res) {
       return res.status(400).json({ message: "Text not found in PDF" });
     }
 
-    // Replace ALL occurrences
-    const modifiedText = textContent.replace(new RegExp(searchText, "g"), replaceText);
+    // ✂️ Replace or remove text
+    const modifiedText = textContent
+      .replace(new RegExp(searchText, "g"), replaceText)
+      .replace(/\s{2,}/g, " ") // Collapse double spaces
+      .trim();
 
-    // ✅ Create new PDF and write modified text to it
+    // 📄 Create new PDF
     const pdfDoc = await PDFDocument.create();
     const page = pdfDoc.addPage();
     const { width, height } = page.getSize();
@@ -48,21 +52,23 @@ async function replaceTextInPDF(req, res) {
 
     const updatedPdfBytes = await pdfDoc.save();
 
-    // Save updated file
+    // 💾 Save updated file
     const filename = `updated-${Date.now()}.pdf`;
     const outputDir = path.join(__dirname, "..", "updated_pdfs");
     if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir);
     const outputPath = path.join(outputDir, filename);
     fs.writeFileSync(outputPath, updatedPdfBytes);
 
-    // Log in DB
+    // 📝 Log in DB
     await pool.query(
       "INSERT INTO pdf_logs(filename, search, replace) VALUES ($1, $2, $3)",
       [filename, searchText, replaceText]
     );
 
     return res.json({
-      message: "✅ PDF processed with replacement",
+      message: replaceText
+        ? "✅ Text replaced in PDF"
+        : "✅ Text removed from PDF",
       filename,
     });
 
