@@ -77,7 +77,7 @@ async function replaceTextInPDF(req, res) {
   }
 }
 console.log("✅ Incoming fields:", {
-  file: req.file,
+  
   searchText: req.body.searchText,
   replaceText: req.body.replaceText,
 });
