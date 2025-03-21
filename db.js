@@ -2,7 +2,7 @@
 const mongoose = require("mongoose");
 const Grid = require("gridfs-stream");
 
-const mongoURI = "mongodb+srv://bl4kcmore:Bl4ckmore4!@cluster0.ros1b.mongodb.net/pdfDB?retryWrites=true&w=majority";
+const mongoURI = "mongodb+srv://gkupreishvili:admin@pdfdb-cluster.90tcw.mongodb.net/?retryWrites=true&w=majority&appName=pdfDB-cluster";
 
 const conn = mongoose.createConnection(mongoURI);
 let gfs;
