@@ -16,48 +16,54 @@ async function replaceTextInPDF(req, res) {
     }
 
     const pdfBuffer = req.files.pdf.data;
-    const parsedData = await pdfParse(pdfBuffer); // Extract text
-    let extractedText = parsedData.text;
+    const pdfDoc = await PDFDocument.load(pdfBuffer);
+    const pages = pdfDoc.getPages();
 
-    if (!extractedText.includes(searchText)) {
+    let textFound = false;
+
+    for (const page of pages) {
+      const { width, height } = page.getSize();
+      const textContent = await page.getTextContent();
+
+      let extractedText = textContent.items.map((item) => item.str).join(" ");
+      
+      if (extractedText.includes(searchText)) {
+        textFound = true;
+
+        // Replace ALL occurrences of searchText
+        const updatedText = extractedText.replace(new RegExp(searchText, "g"), replaceText);
+
+        // ✅ Clear old text before rewriting to avoid overlapping issues
+        page.drawRectangle({
+          x: 30,
+          y: height - 100,
+          width: width - 60,
+          height: 200,
+          color: rgb(1, 1, 1), // White background to cover old text
+        });
+
+        // ✅ Overwrite the updated text at a specific location
+        page.drawText(updatedText, {
+          x: 30,
+          y: height - 50,
+          size: 12,
+          color: rgb(0, 0, 0),
+          font: await pdfDoc.embedFont(StandardFonts.Helvetica),
+        });
+      }
+    }
+
+    if (!textFound) {
       return res.status(400).json({ message: "Text not found in PDF" });
     }
 
-    // ✅ Replace text in the extracted content
-    const updatedText = extractedText.replace(new RegExp(searchText, "g"), replaceText);
-
-    // ✅ Rebuild the PDF with modified text
-    const pdfDoc = await PDFDocument.load(pdfBuffer);
-    const pages = pdfDoc.getPages();
-    const { width, height } = pages[0].getSize();
-
-    // Clear original content (Overlay with white box)
-    for (const page of pages) {
-      page.drawRectangle({
-        x: 50,
-        y: height - 100,
-        width: width - 100,
-        height: 200,
-        color: rgb(1, 1, 1),
-      });
-
-      // Rewrite modified text
-      page.drawText(updatedText, {
-        x: 50,
-        y: height - 50,
-        size: 12,
-        color: rgb(0, 0, 0),
-        font: await pdfDoc.embedFont(StandardFonts.Helvetica),
-      });
-    }
-
-    // ✅ Save updated PDF
+    // ✅ Save the updated PDF
     const updatedPdfBytes = await pdfDoc.save();
     const filename = `updated-${Date.now()}.pdf`;
     const outputDir = path.join(__dirname, "..", "updated_pdfs");
 
     if (!fs.existsSync(outputDir)) {
-      fs.mkdirSync(outputDir);
+      fs.mkdirSync(outputDir, { recursive: true });
     }
 
     const outputPath = path.join(outputDir, filename);
@@ -68,6 +74,8 @@ async function replaceTextInPDF(req, res) {
       "INSERT INTO pdf_logs(filename, search, replace) VALUES($1, $2, $3)",
       [filename, searchText, replaceText]
     );
+
+    console.log("✅ PDF Processed & Saved:", filename);
 
     res.json({
       message: "✅ PDF text replaced successfully",
