@@ -1,8 +1,9 @@
 const fs = require("fs");
 const path = require("path");
 const pool = require("../db");
-const pdfParse = require("pdf-parse");
 const { PDFDocument, rgb, StandardFonts } = require("pdf-lib");
+const pdfjsLib = require("pdfjs-dist/legacy/build/pdf"); // Legacy for node support
+const getStream = require("stream-buffers").ReadableStreamBuffer;
 
 async function replaceTextInPDF(req, res) {
   try {
@@ -16,71 +17,76 @@ async function replaceTextInPDF(req, res) {
     }
 
     const pdfBuffer = req.files.pdf.data;
+    const loadingTask = pdfjsLib.getDocument({ data: pdfBuffer });
+    const pdf = await loadingTask.promise;
 
-    // Step 1: Extract Text
-    const parsed = await pdfParse(pdfBuffer);
-    let originalText = parsed.text;
+    const pdfDoc = await PDFDocument.load(pdfBuffer);
+    const helvetica = await pdfDoc.embedFont(StandardFonts.Helvetica);
 
-    if (!originalText.includes(searchText)) {
+    let replacedAtLeastOnce = false;
+
+    for (let i = 0; i < pdf.numPages; i++) {
+      const page = await pdf.getPage(i + 1);
+      const pageText = await page.getTextContent();
+      const rawItems = pageText.items;
+
+      const pdfLibPage = pdfDoc.getPage(i);
+      const { height } = pdfLibPage.getSize();
+
+      for (let item of rawItems) {
+        const text = item.str;
+        if (text.includes(searchText)) {
+          replacedAtLeastOnce = true;
+          const newText = text.replace(new RegExp(searchText, "g"), replaceText);
+
+          const x = item.transform[4];
+          const y = item.transform[5];
+
+          // Clear old text
+          pdfLibPage.drawRectangle({
+            x,
+            y: height - y - 10,
+            width: newText.length * 6,
+            height: 12,
+            color: rgb(1, 1, 1),
+          });
+
+          // Draw new text
+          pdfLibPage.drawText(newText, {
+            x,
+            y: height - y - 10,
+            font: helvetica,
+            size: 12,
+            color: rgb(0, 0, 0),
+          });
+        }
+      }
+    }
+
+    if (!replacedAtLeastOnce) {
       return res.status(400).json({ message: "Text not found in PDF" });
     }
 
-    // Step 2: Replace ALL occurrences
-    const replacedText = originalText.replace(new RegExp(searchText, "g"), replaceText);
-
-    // Step 3: Rebuild the PDF with replaced content
-    const pdfDoc = await PDFDocument.create();
-    const page = pdfDoc.addPage();
-    const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
-    const fontSize = 12;
-    const lineHeight = 18;
-    const margin = 30;
-    const { width, height } = page.getSize();
-    let y = height - margin;
-
-    const lines = replacedText.split(/\r?\n/);
-    let lineCount = 0;
-    let currentPage = page;
-
-    for (const line of lines) {
-      if (lineCount >= Math.floor((height - margin * 2) / lineHeight)) {
-        currentPage = pdfDoc.addPage();
-        y = height - margin;
-        lineCount = 0;
-      }
-
-      currentPage.drawText(line, {
-        x: margin,
-        y: y - lineCount * lineHeight,
-        size: fontSize,
-        font,
-        color: rgb(0, 0, 0),
-      });
-
-      lineCount++;
-    }
-
-    // Step 4: Save new PDF
     const updatedPdfBytes = await pdfDoc.save();
     const filename = `updated-${Date.now()}.pdf`;
     const outputDir = path.join(__dirname, "..", "updated_pdfs");
     if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir);
-    fs.writeFileSync(path.join(outputDir, filename), updatedPdfBytes);
+    const outputPath = path.join(outputDir, filename);
+    fs.writeFileSync(outputPath, updatedPdfBytes);
 
-    // Step 5: Log in PostgreSQL
     await pool.query(
       "INSERT INTO pdf_logs(filename, search, replace) VALUES ($1, $2, $3)",
       [filename, searchText, replaceText]
     );
 
-    return res.json({
-      message: "✅ PDF text replaced successfully",
+    res.json({
+      message: "✅ Replacements done, layout preserved",
       filename,
     });
 
   } catch (error) {
     console.error("❌ ERROR:", error);
-    return res.status(500).json({ message: "Error processing PDF", error: error.message });
+    res.status(500).json({ message: "Error processing PDF", error: error.message });
   }
 }
 
