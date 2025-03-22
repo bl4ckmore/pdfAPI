@@ -26,7 +26,7 @@ async function replaceTextInPDF(req, res) {
     }
 
     // 🧠 Step 2: Replace All Occurrences
-    const modifiedText = textContent.replace(new RegExp(searchText, "g"), "");
+    const modifiedText = textContent.replace(new RegExp(searchText, "g"), replaceText);
 
     // 🧠 Step 3: Split into lines
     const lines = modifiedText.split(/\r?\n/);
