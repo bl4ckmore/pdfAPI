@@ -1,10 +1,11 @@
 const express = require("express");
 const router = express.Router();
-const { replaceTextInPDF, extractTextFromPDF } = require("../controllers/pdfController");
 const uploadMiddleware = require("../middlewares/uploadMiddleware");
 const authMiddleware = require("../middlewares/authMiddleware");
+const pdfController = require("../controllers/pdfController");
 
-router.post("/replace-text", authMiddleware, uploadMiddleware, replaceTextInPDF);
-router.post("/extract-text", uploadMiddleware, extractTextFromPDF);
+// ✅ Use named functions from controller
+router.post("/replace-text", authMiddleware, uploadMiddleware, pdfController.replaceTextInPDF);
+router.post("/extract-text", uploadMiddleware, pdfController.extractTextFromPDF);
 
 module.exports = router;

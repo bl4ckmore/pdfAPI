@@ -14,6 +14,9 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+const fileUpload = require("express-fileupload");
+app.use(fileUpload());
+
 // Routes
 app.use("/api/pdf", pdfRoutes);
 app.use("/api/auth", authRoutes); // ✅ REGISTER / LOGIN ROUTES
