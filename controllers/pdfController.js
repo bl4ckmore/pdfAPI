@@ -1,8 +1,23 @@
 const fs = require("fs");
 const path = require("path");
 const pool = require("../db");
-const pdfParse = require("pdf-parse");
 const { PDFDocument, rgb, StandardFonts } = require("pdf-lib");
+const pdfjsLib = require("pdfjs-dist");
+
+async function extractTextFromPDF(buffer) {
+  const loadingTask = pdfjsLib.getDocument({ data: buffer });
+  const pdf = await loadingTask.promise;
+  let fullText = "";
+
+  for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+    const page = await pdf.getPage(pageNum);
+    const textContent = await page.getTextContent();
+    const strings = textContent.items.map((item) => item.str);
+    fullText += strings.join(" ") + "\n";
+  }
+
+  return fullText;
+}
 
 async function replaceTextInPDF(req, res) {
   try {
@@ -17,41 +32,40 @@ async function replaceTextInPDF(req, res) {
 
     const pdfBuffer = req.files.pdf.data;
 
-    // Step 1: Extract Text
-    const parsed = await pdfParse(pdfBuffer);
-    let originalText = parsed.text;
+    // Step 1: Extract text using pdfjs-dist
+    const textContent = await extractTextFromPDF(pdfBuffer);
 
-    if (!originalText.includes(searchText)) {
+    if (!textContent.includes(searchText)) {
       return res.status(400).json({ message: "Text not found in PDF" });
     }
 
-    // Step 2: Replace ALL occurrences
-    const replacedText = originalText.replace(new RegExp(searchText, "g"), replaceText);
+    // Step 2: Replace all occurrences
+    const modifiedText = textContent.replace(new RegExp(searchText, "g"), replaceText);
+    const lines = modifiedText.split(/\r?\n/);
 
-    // Step 3: Rebuild the PDF with replaced content
+    // Step 3: Create new PDF
     const pdfDoc = await PDFDocument.create();
-    const page = pdfDoc.addPage();
     const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
     const fontSize = 12;
     const lineHeight = 18;
     const margin = 30;
-    const { width, height } = page.getSize();
-    let y = height - margin;
+    const maxLinesPerPage = 40;
 
-    const lines = replacedText.split(/\r?\n/);
+    let page = pdfDoc.addPage();
+    let { width, height } = page.getSize();
+    let y = height - margin;
     let lineCount = 0;
-    let currentPage = page;
 
     for (const line of lines) {
-      if (lineCount >= Math.floor((height - margin * 2) / lineHeight)) {
-        currentPage = pdfDoc.addPage();
+      if (lineCount >= maxLinesPerPage) {
+        page = pdfDoc.addPage();
         y = height - margin;
         lineCount = 0;
       }
 
-      currentPage.drawText(line, {
+      page.drawText(line, {
         x: margin,
-        y: y - lineCount * lineHeight,
+        y: y - lineHeight * lineCount,
         size: fontSize,
         font,
         color: rgb(0, 0, 0),
@@ -60,27 +74,27 @@ async function replaceTextInPDF(req, res) {
       lineCount++;
     }
 
-    // Step 4: Save new PDF
+    // Step 4: Save PDF
     const updatedPdfBytes = await pdfDoc.save();
     const filename = `updated-${Date.now()}.pdf`;
     const outputDir = path.join(__dirname, "..", "updated_pdfs");
     if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir);
-    fs.writeFileSync(path.join(outputDir, filename), updatedPdfBytes);
+    const outputPath = path.join(outputDir, filename);
+    fs.writeFileSync(outputPath, updatedPdfBytes);
 
-    // Step 5: Log in PostgreSQL
+    // Step 5: Log to DB
     await pool.query(
       "INSERT INTO pdf_logs(filename, search, replace) VALUES ($1, $2, $3)",
       [filename, searchText, replaceText]
     );
 
-    return res.json({
+    res.json({
       message: "✅ PDF text replaced successfully",
       filename,
     });
-
   } catch (error) {
     console.error("❌ ERROR:", error);
-    return res.status(500).json({ message: "Error processing PDF", error: error.message });
+    res.status(500).json({ message: "Error processing PDF", error: error.message });
   }
 }
 
