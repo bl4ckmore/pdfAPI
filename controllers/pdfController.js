@@ -4,6 +4,7 @@ const pool = require("../db");
 const pdfParse = require("pdf-parse");
 const { PDFDocument, rgb, StandardFonts } = require("pdf-lib");
 
+// ✅ Replace Text in PDF
 async function replaceTextInPDF(req, res) {
   try {
     if (!req.files || !req.files.pdf) {
@@ -17,51 +18,52 @@ async function replaceTextInPDF(req, res) {
 
     const pdfBuffer = req.files.pdf.data;
 
-    // 1️⃣ Extract text
+    // Step 1: Extract text
     const parsed = await pdfParse(pdfBuffer);
-    const originalText = parsed.text;
+    let textContent = parsed.text;
 
-    if (!originalText.includes(searchText)) {
+    if (!textContent.includes(searchText)) {
       return res.status(400).json({ message: "Text not found in PDF" });
     }
 
-    // 2️⃣ Replace all matches
-    const cleanedText = originalText.replace(new RegExp(searchText, "g"), replaceText);
+    // Step 2: Replace All
+    const modifiedText = textContent.replace(new RegExp(searchText, "g"), replaceText);
 
-    // 3️⃣ Prepare new PDF
+    // Step 3: Split into lines
+    const lines = modifiedText.split(/\r?\n/);
+
+    // Step 4: Create new PDF
     const pdfDoc = await PDFDocument.create();
-    const page = pdfDoc.addPage();
-    const { width, height } = page.getSize();
     const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
     const fontSize = 12;
-    const margin = 40;
-    const lineHeight = 16;
-    const maxLinesPerPage = Math.floor((height - margin * 2) / lineHeight);
+    const lineHeight = 18;
+    const margin = 30;
+    const maxLinesPerPage = 40;
 
-    const lines = cleanedText.split(/\r?\n/);
-    let lineCounter = 0;
-    let currentPage = page;
+    let page = pdfDoc.addPage();
+    let { width, height } = page.getSize();
     let y = height - margin;
+    let lineCount = 0;
 
     for (const line of lines) {
-      if (lineCounter >= maxLinesPerPage) {
-        currentPage = pdfDoc.addPage();
+      if (lineCount >= maxLinesPerPage) {
+        page = pdfDoc.addPage();
         y = height - margin;
-        lineCounter = 0;
+        lineCount = 0;
       }
 
-      currentPage.drawText(line, {
+      page.drawText(line, {
         x: margin,
-        y: y - lineHeight * lineCounter,
+        y: y - lineHeight * lineCount,
         size: fontSize,
         font,
         color: rgb(0, 0, 0),
       });
 
-      lineCounter++;
+      lineCount++;
     }
 
-    // 4️⃣ Save new PDF
+    // Step 5: Save PDF
     const updatedPdfBytes = await pdfDoc.save();
     const filename = `updated-${Date.now()}.pdf`;
     const outputDir = path.join(__dirname, "..", "updated_pdfs");
@@ -69,23 +71,40 @@ async function replaceTextInPDF(req, res) {
     const outputPath = path.join(outputDir, filename);
     fs.writeFileSync(outputPath, updatedPdfBytes);
 
-    // 5️⃣ Save log
+    // Step 6: Save to DB
     await pool.query(
       "INSERT INTO pdf_logs(filename, search, replace) VALUES ($1, $2, $3)",
       [filename, searchText, replaceText]
     );
 
     res.json({
-      message: "✅ All matches replaced successfully",
+      message: "✅ PDF text replaced successfully",
       filename,
     });
+
   } catch (error) {
-    console.error("❌ FINAL ERROR:", error);
-    res.status(500).json({
-      message: "Error processing PDF",
-      error: error.message,
-    });
+    console.error("❌ ERROR:", error);
+    res.status(500).json({ message: "Error processing PDF", error: error.message });
   }
 }
 
-module.exports = { replaceTextInPDF };
+// ✅ New Route: Extract Text for Preview
+async function extractTextFromPDF(req, res) {
+  try {
+    if (!req.files || !req.files.pdf) {
+      return res.status(400).json({ message: "No file uploaded" });
+    }
+
+    const pdfBuffer = req.files.pdf.data;
+    const parsed = await pdfParse(pdfBuffer);
+    res.json({ text: parsed.text });
+  } catch (error) {
+    console.error("❌ Extract Text Error:", error);
+    res.status(500).json({ message: "Error extracting text", error: error.message });
+  }
+}
+
+module.exports = {
+  replaceTextInPDF,
+  extractTextFromPDF
+};
