@@ -33,7 +33,10 @@ async function replaceTextInPDF(req, res) {
 
     // 📄 Step 4: Create New PDF
     const pdfDoc = await PDFDocument.create();
-    const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+    const fontPath = path.join(__dirname, "..", "fonts", "Roboto-Regular.ttf");
+const customFontBytes = fs.readFileSync(fontPath);
+const font = await pdfDoc.embedFont(customFontBytes, { subset: true });
+
     const fontSize = 12;
     const lineHeight = 18;
     const margin = 30;
