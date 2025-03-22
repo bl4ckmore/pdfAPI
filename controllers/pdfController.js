@@ -73,9 +73,10 @@ async function replaceTextInPDF(req, res) {
 
     // Step 6: Save to DB
     await pool.query(
-      "INSERT INTO pdf_logs(filename, search, replace) VALUES ($1, $2, $3)",
-      [filename, searchText, replaceText]
+      "INSERT INTO pdf_logs(user_id, filename, search, replace) VALUES ($1, $2, $3, $4)",
+      [req.user.id, filename, searchText, replaceText]
     );
+    
 
     res.json({
       message: "✅ PDF text replaced successfully",
