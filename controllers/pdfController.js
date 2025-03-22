@@ -10,71 +10,77 @@ async function replaceTextInPDF(req, res) {
       return res.status(400).json({ message: "No file uploaded" });
     }
 
-    const { searchText } = req.body;
-    if (!searchText) {
-      return res.status(400).json({ message: "Missing search text" });
+    const { searchText, replaceText } = req.body;
+    if (!searchText || !replaceText) {
+      return res.status(400).json({ message: "Missing search or replace text" });
     }
 
     const pdfBuffer = req.files.pdf.data;
 
-    // Extract text content
+    // 🧠 Step 1: Extract Text
     const parsed = await pdfParse(pdfBuffer);
-    const textContent = parsed.text;
+    let textContent = parsed.text;
 
     if (!textContent.includes(searchText)) {
       return res.status(400).json({ message: "Text not found in PDF" });
     }
 
-    // Replace all occurrences of searchText with empty string
-    const clearedText = textContent.replace(new RegExp(searchText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), "g"), "");
+    // 🧠 Step 2: Replace All Occurrences
+    const modifiedText = textContent.replace(new RegExp(searchText, "g"), replaceText);
 
-    // Create a new PDF and write the cleared content
+    // 🧠 Step 3: Split into lines
+    const lines = modifiedText.split(/\r?\n/);
+
+    // 📄 Step 4: Create New PDF
     const pdfDoc = await PDFDocument.create();
-    const page = pdfDoc.addPage();
     const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
     const fontSize = 12;
-    const { width, height } = page.getSize();
+    const lineHeight = 18;
     const margin = 30;
-    const lineHeight = 16;
+    const maxLinesPerPage = 40;
 
-    // Split and write line-by-line
-    const lines = clearedText.split(/\r?\n/);
+    let page = pdfDoc.addPage();
+    let { width, height } = page.getSize();
     let y = height - margin;
+
+    let lineCount = 0;
+
     for (const line of lines) {
-      if (y < margin) {
+      if (lineCount >= maxLinesPerPage) {
+        page = pdfDoc.addPage();
         y = height - margin;
-        pdfDoc.addPage();
+        lineCount = 0;
       }
 
-      try {
-        page.drawText(line, {
-          x: margin,
-          y,
-          size: fontSize,
-          font,
-          color: rgb(0, 0, 0),
-        });
-        y -= lineHeight;
-      } catch (err) {
-        console.warn("⚠️ Skipped line:", line);
-      }
+      page.drawText(line, {
+        x: margin,
+        y: y - lineHeight * lineCount,
+        size: fontSize,
+        font,
+        color: rgb(0, 0, 0),
+      });
+
+      lineCount++;
     }
 
-    // Save and respond
+    // 💾 Step 5: Save PDF
     const updatedPdfBytes = await pdfDoc.save();
-    const filename = `cleared-${Date.now()}.pdf`;
+    const filename = `updated-${Date.now()}.pdf`;
     const outputDir = path.join(__dirname, "..", "updated_pdfs");
     if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir);
     const outputPath = path.join(outputDir, filename);
     fs.writeFileSync(outputPath, updatedPdfBytes);
 
-    // Optional DB log
+    // 💾 Step 6: Log to DB
     await pool.query(
       "INSERT INTO pdf_logs(filename, search, replace) VALUES ($1, $2, $3)",
-      [filename, searchText, "[CLEARED]"]
+      [filename, searchText, replaceText]
     );
 
-    res.json({ message: "✅ Text cleared successfully", filename });
+    res.json({
+      message: "✅ PDF text replaced successfully",
+      filename,
+    });
 
   } catch (error) {
     console.error("❌ ERROR:", error);
