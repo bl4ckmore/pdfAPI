@@ -7,7 +7,7 @@ require("dotenv").config();
 
 // ✅ Register Controller
 const register = async (req, res) => {
-  const { name, email, password } = req.body;
+  const { name, email, password, role = "normal" } = req.body; // 👈 Accept role (optional, default: 'normal')
 
   try {
     // 🔍 Check if user already exists
@@ -20,10 +20,10 @@ const register = async (req, res) => {
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
-    // 📝 Insert user into DB
+    // 📝 Insert user into DB (now includes role)
     await pool.query(
-      "INSERT INTO users(name, email, password) VALUES ($1, $2, $3)",
-      [name, email, hashedPassword]
+      "INSERT INTO users(name, email, password, role) VALUES ($1, $2, $3, $4)",
+      [name, email, hashedPassword, role]
     );
 
     res.status(201).json({ success: true, message: "User registered successfully" });
@@ -58,10 +58,16 @@ const login = async (req, res) => {
       expiresIn: "7d",
     });
 
+    // 👇 Include role in response!
     res.json({
       success: true,
       token,
-      user: { id: user.id, name: user.name, email: user.email },
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+      },
     });
 
   } catch (err) {
